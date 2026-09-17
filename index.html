@@ -278,7 +278,7 @@ const MENU_CATEGORIES = ['ピザ','バーガー','前菜','パスタ','デザー
 const PREP_CATEGORIES = ['ソース','煮込み','ソテー','生地','マリネ','その他'];
 
 const DATA_VERSION = 5;   // データ形式バージョン
-const APP_BUILD = 'v5.0 Pages / 2026-09-17';   // 画面右上に表示するビルド表示
+const APP_BUILD = 'v5.1 Pages / 2026-09-17';   // 画面右上に表示するビルド表示
 const SEED_REVISION = 11;   // 初期データの版。ここを上げると、既に使っている環境にも追加分が入る
 const STORAGE_KEY = 'menuCostApp.v3';
 
@@ -551,6 +551,24 @@ async function ghFetch(url, opts){
   try{ json = await res.json(); }catch(e){}
   return {ok:res.ok, status:res.status, json:json};
 }
+// 1MBを超えるファイルは通常形式のcontentが空になるため、raw形式で本文を取得する。
+async function ghFetchRaw(url){
+  const headers = {
+    'Accept':'application/vnd.github.raw+json',
+    'Authorization':'Bearer '+GH.cfg.token,
+    'X-GitHub-Api-Version':'2022-11-28'
+  };
+  const res = await fetch(url,{method:'GET',headers:headers});
+  let body='';
+  try{ body=await res.text(); }catch(e){}
+  return {ok:res.ok,status:res.status,text:body};
+}
+async function ghReadRemoteFile(meta,url){
+  if(meta && meta.json && meta.json.content) return JSON.parse(b64decode(meta.json.content));
+  const raw=await ghFetchRaw(url);
+  if(!raw.ok) throw new Error(ghErrText(raw));
+  return JSON.parse(raw.text);
+}
 function ghErrText(r){
   if(r.status===401) return 'アクセストークンが正しくありません。設定を確認してください。';
   if(r.status===403) return 'アクセスが拒否されました。トークンの権限（Contents の読み書き）を確認してください。';
@@ -632,7 +650,7 @@ async function ghPull(opts){
   }
   if(!r.ok){ ghSetState('error', ghErrText(r)); if(!o.silent) toast(ghErrText(r), true); return false; }
   let remote;
-  try{ remote = JSON.parse(b64decode(r.json.content)); }
+  try{ remote = await ghReadRemoteFile(r,ghUrl()+'?ref='+encodeURIComponent(GH.cfg.branch||'main')); }
   catch(e){ ghSetState('error','GitHub上のファイルを読み取れませんでした。'); if(!o.silent) toast('GitHub上のファイルを読み取れませんでした。', true); return false; }
   const sameAsBefore = (GH.sha === r.json.sha);
   GH.lastPull = nowStr();
@@ -712,7 +730,7 @@ async function ghPush(opts){
       const g = await ghFetch(ghUrl()+'?ref='+encodeURIComponent(GH.cfg.branch||'main'));
       if(!g.ok){ ghSetState('error', ghErrText(g)); break; }
       let remote=null;
-      try{ remote = JSON.parse(b64decode(g.json.content)); }catch(e){}
+      try{ remote = await ghReadRemoteFile(g,ghUrl()+'?ref='+encodeURIComponent(GH.cfg.branch||'main')); }catch(e){}
       if(!remote){ ghSetState('error','GitHub上のファイルを読み取れませんでした。'); break; }
       if(!GH.base){
         ghSetState('conflict','同期の基準がありません。JSONバックアップを取り、GitHubとこの端末の内容を確認してください。');
