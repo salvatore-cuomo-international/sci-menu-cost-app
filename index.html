@@ -278,7 +278,7 @@ const MENU_CATEGORIES = ['ピザ','バーガー','前菜','パスタ','デザー
 const PREP_CATEGORIES = ['ソース','煮込み','ソテー','生地','マリネ','その他'];
 
 const DATA_VERSION = 5;   // データ形式バージョン
-const APP_BUILD = 'v5.2 Pages / 2026-10-26';   // 画面右上に表示するビルド表示
+const APP_BUILD = 'v5.3 Pages / 2026-10-26';   // 画面右上に表示するビルド表示
 const SEED_REVISION = 11;   // 初期データの版。ここを上げると、既に使っている環境にも追加分が入る
 const STORAGE_KEY = 'menuCostApp.v3';
 
@@ -706,8 +706,8 @@ async function ghPush(opts){
   // 復旧時の空データ誤送信を防ぐ。空にする操作は通常運用では許可しない。
   const localCoreCount = (DATA.ingredients||[]).length + (DATA.packages||[]).length + (DATA.preps||[]).length + (DATA.menus||[]).length;
   const baseCoreCount = (GH.base.ingredients||[]).length + (GH.base.packages||[]).length + (GH.base.preps||[]).length + (GH.base.menus||[]).length;
-  if(localCoreCount===0 && baseCoreCount>0 && !o.allowEmpty){
-    ghSetState('conflict','空の端末データによるGitHub版の上書きを停止しました。GitHubの最新を取り込んでください。');
+  if(localCoreCount===0){
+    ghSetState('conflict','データが0件のためGitHubへの送信を停止しました。GitHubの最新を取り込んでください。');
     if(!o.silent) toast(GH.lastError,true);
     return false;
   }
