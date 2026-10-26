@@ -278,7 +278,7 @@ const MENU_CATEGORIES = ['ピザ','バーガー','前菜','パスタ','デザー
 const PREP_CATEGORIES = ['ソース','煮込み','ソテー','生地','マリネ','その他'];
 
 const DATA_VERSION = 5;   // データ形式バージョン
-const APP_BUILD = 'v5.1 Pages / 2026-09-17';   // 画面右上に表示するビルド表示
+const APP_BUILD = 'v5.2 Pages / 2026-10-26';   // 画面右上に表示するビルド表示
 const SEED_REVISION = 11;   // 初期データの版。ここを上げると、既に使っている環境にも追加分が入る
 const STORAGE_KEY = 'menuCostApp.v3';
 
@@ -675,6 +675,7 @@ async function ghPull(opts){
   if(!await Store.save(DATA)){ ghSetState('error','取り込んだ内容を端末に保存できませんでした。'); return false; }
   GH.sha=r.json.sha;
   GH.base=deepCopy(remote); // 基準はサーバーの実際の内容。ローカルの未送信分は残す。
+  if(o.force) GH.queued=false; // 強制復旧の直後に古い端末データを自動送信しない
   if(!await ghRemember()) return false;
   if(JSON.stringify(stripVolatile(merged))!==JSON.stringify(stripVolatile(remote))) GH.queued=true;
   ghSetState(GH.queued?'pending':'ok');
@@ -702,6 +703,14 @@ function stripVolatile(d){
 async function ghPush(opts){
   const o = opts||{};
   if(!ghReady() || !GH.base) return false;
+  // 復旧時の空データ誤送信を防ぐ。空にする操作は通常運用では許可しない。
+  const localCoreCount = (DATA.ingredients||[]).length + (DATA.packages||[]).length + (DATA.preps||[]).length + (DATA.menus||[]).length;
+  const baseCoreCount = (GH.base.ingredients||[]).length + (GH.base.packages||[]).length + (GH.base.preps||[]).length + (GH.base.menus||[]).length;
+  if(localCoreCount===0 && baseCoreCount>0 && !o.allowEmpty){
+    ghSetState('conflict','空の端末データによるGitHub版の上書きを停止しました。GitHubの最新を取り込んでください。');
+    if(!o.silent) toast(GH.lastError,true);
+    return false;
+  }
   if(GH.busy){ GH.queued = true; return false; }
   if(!await ghPrivateReady()) return false;
   GH.busy = true; ghSetState('busy');
@@ -3466,6 +3475,8 @@ function ghSettingsPanel(){
         '端末の現在のデータをJSONファイルに書き出してから、GitHubの内容で置き換えます。差分の自動統合ができない場合だけ使ってください。',
         'バックアップして置き換える', async()=>{
           exportJson();
+          // 復旧中は自動送信を止め、GitHub版の取得を最優先にする
+          GH.cfg.auto=false; ghSaveCfg(); cb.checked=false; GH.queued=false;
           const ok=await ghPull({force:true});
           if(ok) toast('GitHub版を取り込みました。');
           paintStat();
